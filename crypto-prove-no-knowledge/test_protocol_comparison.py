@@ -143,6 +143,101 @@ class ProtocolComparisonTests(unittest.TestCase):
             demo["malicious"]["corrected_verifier_accepts_fixed_t1_for_e0"]
         )
 
+    def test_invalid_inputs_are_rejected(self):
+        """O verificador corrigido deve rejeitar entradas fora do domínio esperado."""
+        public_key = self.y
+
+        # Desafio fora de {0, 1}: montamos o Transcript direto no construtor,
+        # pois make_honest_transcript já valida e barraria isso antes da hora.
+        for bad_challenge in (-1, 2, 5):
+            transcript = Transcript(commitment=1, challenge=bad_challenge, response=0)
+            self.assertFalse(
+                verify_corrected(
+                    g=self.g, p=self.p, q=self.q,
+                    public_key=public_key, transcript=transcript,
+                )
+            )
+
+        # Resposta fora do intervalo [0, q)
+        transcript_bad_response = Transcript(commitment=1, challenge=0, response=self.q)
+        self.assertFalse(
+            verify_corrected(
+                g=self.g, p=self.p, q=self.q,
+                public_key=public_key, transcript=transcript_bad_response,
+            )
+        )
+
+        # Compromisso fora do intervalo [1, p)
+        for bad_commitment in (0, self.p):
+            transcript_bad_commitment = Transcript(
+                commitment=bad_commitment, challenge=0, response=0
+            )
+            self.assertFalse(
+                verify_corrected(
+                    g=self.g, p=self.p, q=self.q,
+                    public_key=public_key, transcript=transcript_bad_commitment,
+                )
+            )
+
+    def test_random_parameters(self):
+        """Roda os mesmos checks honestos com alguns primos pequenos diferentes."""
+        # Cada tripla (p, q, g) abaixo é fixa e pré-validada: g tem ordem q
+        # dentro do grupo mod p. Isso evita "testes instáveis" que passariam
+        # ou falhariam dependendo de um sorteio aleatório de g.
+        casos = [
+            (23, 11, 2),
+            (23, 11, 4),
+            (47, 23, 2),
+        ]
+
+        for p, q, g in casos:
+            with self.subTest(p=p, q=q, g=g):
+                self.assertEqual(pow(g, q, p), 1, "g precisa ter ordem q mod p")
+
+                witness = 3
+                nonce = 4
+
+                public_key, honest_zero = make_honest_transcript(
+                    g=g, p=p, q=q, witness=witness, nonce=nonce, challenge=0
+                )
+                _, honest_one = make_honest_transcript(
+                    g=g, p=p, q=q, witness=witness, nonce=nonce, challenge=1
+                )
+
+                self.assertTrue(
+                    verify_corrected(
+                        g=g, p=p, q=q, public_key=public_key, transcript=honest_zero
+                    )
+                )
+                self.assertTrue(
+                    verify_corrected(
+                        g=g, p=p, q=q, public_key=public_key, transcript=honest_one
+                    )
+                )
+
+                extracted = extract_witness(
+                    g=g, p=p, q=q, public_key=public_key,
+                    first=honest_zero, second=honest_one,
+                )
+                self.assertEqual(witness, extracted)
+
+    def test_extractor_fails_on_invalid_transcript(self):
+        """O extrator deve levantar erro se uma das transcrições não é aceita."""
+        _, honest_zero = make_honest_transcript(
+            g=self.g, p=self.p, q=self.q, witness=self.x, nonce=3, challenge=0
+        )
+        # Segunda transcrição corrompida: resposta fora do intervalo válido,
+        # construída direto (Transcript é imutável, não dá pra "quebrar" depois).
+        bad_second = Transcript(
+            commitment=honest_zero.commitment, challenge=1, response=self.q
+        )
+
+        with self.assertRaises(ValueError):
+            extract_witness(
+                g=self.g, p=self.p, q=self.q, public_key=self.y,
+                first=honest_zero, second=bad_second,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
