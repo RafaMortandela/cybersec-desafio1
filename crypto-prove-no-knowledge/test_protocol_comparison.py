@@ -13,12 +13,20 @@ from protocol_comparison import (
 
 
 class ProtocolComparisonTests(unittest.TestCase):
+
+    # Define os parametros matematicos basicos que serao usados nos testes
+
     def setUp(self):
         self.p = 23
         self.q = 11
         self.g = 2
         self.x = 7
         self.y = pow(self.g, self.x, self.p)
+
+    # Valida o fluxo de um provador honesto e o soundness, gerando duas transcricoes honestas:
+    # (para e=0, e=1), utilizando o mesmo nonce inicial.
+    # O resultado esperado é aceitar ambas as transcicoes de forma independente. A funcao de
+    # extracao tambem deve conseguir deduzir a chave privada x = 7 cruzando as respostas.
 
     def test_honest_transcripts_are_accepted_and_extract_the_witness(self):
         _, transcript_zero = make_honest_transcript(
@@ -68,6 +76,11 @@ class ProtocolComparisonTests(unittest.TestCase):
             ),
         )
 
+    # Comprova matematicamente a falha do servidor, criando transicoes maliciosas onde o
+    # provador forja o compromisso de tras para frente, sem conhecer a chave privada.
+    # Resultado esperado: ambas as transcricoes falsas devem passar pelas funcoes verify,
+    # confirmando que o sistema original é falho.
+
     def test_malicious_transcripts_pass_the_two_vulnerable_checks(self):
         malicious_zero, malicious_one = make_malicious_transcripts(
             p=self.p, public_key=self.y
@@ -90,6 +103,12 @@ class ProtocolComparisonTests(unittest.TestCase):
                 response=malicious_one.response,
             )
         )
+
+    # Prova que a correcao do protocolo neutraliza o ataque, utilizando o 
+    # verificador corrigido para tentar burlar o desafio 0, mas respondendo ao
+    # desafio 1 e vice-versa.
+    # O resultado esperado é o verificador corrigido rejeitar as duas tentativas,
+    # retornando False, pois a falsificacao so sobrevive se prever o desafio exato.
 
     def test_malicious_strategy_fails_when_one_commitment_is_fixed(self):
         malicious_zero, malicious_one = make_malicious_transcripts(
@@ -115,6 +134,11 @@ class ProtocolComparisonTests(unittest.TestCase):
             )
         )
 
+    # Garante a integridade da funcao matematica de extracao, tentando extrair a chave privada
+    # fornecendo dias transcricoes maliciosas que possuem compromissos diferentes.
+    # Resultado esperado: a funcao deve abortar a operacao e levantar um erro "ValueError" com
+    # a mensagem, provando que a quebra algebrica é impossível sem um compromisso único.
+
     def test_extractor_rejects_two_different_commitments(self):
         malicious_zero, malicious_one = make_malicious_transcripts(
             p=self.p, public_key=self.y
@@ -130,6 +154,11 @@ class ProtocolComparisonTests(unittest.TestCase):
                 second=malicious_one,
             )
 
+    # Realiza um teste de integração completo do fluxo contido em protocol_comparison.py,
+    # chamando a função build_demo() e analisando o dicionário de resultados gerado.
+    # Resultado esperado: transcrições honestas são aceitas, o servidor vulnerável é enganado,
+    # os compromissos maliciosos divergem e o verificador corrigido bloqueia os ataques.  
+
     def test_full_demo_keeps_expected_security_properties(self):
         demo = build_demo()
 
@@ -142,6 +171,12 @@ class ProtocolComparisonTests(unittest.TestCase):
         self.assertFalse(
             demo["malicious"]["corrected_verifier_accepts_fixed_t1_for_e0"]
         )
+
+    # Testa as defesas do verificador corrigido contra entradas fora do domínio matemático 
+    # esperado, injetando propositalmente desafios que não são binários, respostas iguais
+    # ou maiores que a ordem q, e compromissos fora do intervalo modular [1, p).
+    # Resultado esperado: o verificador corrigido deve detectar anomalias e rejeitar todas
+    # as transcrições, retornando False.
 
     def test_invalid_inputs_are_rejected(self):
         """O verificador corrigido deve rejeitar entradas fora do domínio esperado."""
@@ -178,6 +213,13 @@ class ProtocolComparisonTests(unittest.TestCase):
                     public_key=public_key, transcript=transcript_bad_commitment,
                 )
             )
+
+    # Prova que a lógica do protocolo não funciona apenas para os número do setUp, mas 
+    # para qualquer grupo válido, executando o fluxo honesto e de extração contra três 
+    # conjuntos distintos de parâmetros (p, q, g), validando antes que o gerador realmente
+    # possui ordem q.
+    # Resultado esperado: para todos os subgrupos, as transcrições devem ser validadas e a
+    # extração da chave privada deve ser precisa.
 
     def test_random_parameters(self):
         """Roda os mesmos checks honestos com alguns primos pequenos diferentes."""
@@ -220,6 +262,11 @@ class ProtocolComparisonTests(unittest.TestCase):
                     first=honest_zero, second=honest_one,
                 )
                 self.assertEqual(witness, extracted)
+
+        # Protege a matemática da extração contra dados corrompidos, fornecendo uma 
+        # transcrição honesta e uma transcrição corrompida (resposta igual a q).
+        # Resultado esperado: identifica que uma das transcrições não é matematicamente válida
+        # e levanta um ValueError antes de tentar resolver as equações.
 
     def test_extractor_fails_on_invalid_transcript(self):
         """O extrator deve levantar erro se uma das transcrições não é aceita."""
