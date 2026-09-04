@@ -313,3 +313,8 @@ Os testes confirmam que:
 
 
 
+## Referências
+- https://github.com/aahsani/CTFWriteups/tree/master/UTCTF2021/ProveNoKnowledge
+- https://cor.team/posts/utctf-2021-prove-no-knowledge/
+- https://github.com/utisss/UTCTF-21/tree/main/crypto-prove-no-knowledge 
+- https://en.wikipedia.org/wiki/Zero-knowledge_proof
